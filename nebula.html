@@ -1,0 +1,772 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>NEBULA DECISIONS | Cinematic AI Simulator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <!-- Three.js core for volumetric 3D depth -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.128.0/build/three.module.js"
+            }
+        }
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            color: #f0f3ff;
+            overflow-x: hidden;
+            scroll-behavior: smooth;
+            background: #05070f;
+        }
+
+        /* Three.js canvas fullscreen with depth layers */
+        #threeCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: -3;
+            display: block;
+        }
+
+        /* Multi-layer fog overlays (depth parallax) */
+        .fog-layer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: -2;
+        }
+        .fog1 { background: radial-gradient(circle at 30% 40%, rgba(20,10,40,0.4), transparent 70%); animation: driftFog 22s infinite alternate; }
+        .fog2 { background: radial-gradient(circle at 80% 70%, rgba(0,50,80,0.3), transparent 80%); animation: driftFog2 18s infinite alternate; }
+        @keyframes driftFog {
+            0% { transform: scale(1) translate(0%,0%); opacity: 0.5; }
+            100% { transform: scale(1.2) translate(5%,5%); opacity: 0.8; }
+        }
+        @keyframes driftFog2 {
+            0% { transform: scale(1) translate(0%,0%); opacity: 0.3; }
+            100% { transform: scale(1.3) translate(-3%,-4%); opacity: 0.7; }
+        }
+
+        /* Film grain noise overlay */
+        .grain-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iNDAwIj48ZmlsdGVyIGlkPSJmIj48ZmVUdXJidWxlbmNlIHR5cGU9ImZyYWN0YWxOb2lzZSIgYmFzZUZyZXF1ZW5jeT0iLjgiIG51bU9jdGF2ZXM9IjMiLz48L2ZpbHRlcj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWx0ZXI9InVybCgjZikiIG9wYWNpdHk9IjAuMDYiLz48L3N2Zz4=');
+            background-repeat: repeat;
+            opacity: 0.2;
+            pointer-events: none;
+            z-index: -1;
+            animation: grainShift 14s infinite alternate;
+        }
+        @keyframes grainShift {
+            0% { background-position: 0 0; opacity: 0.15; }
+            100% { background-position: 120px 120px; opacity: 0.3; }
+        }
+
+        /* Holographic glass cards */
+        .glass-card {
+            background: rgba(12, 18, 32, 0.65);
+            backdrop-filter: blur(16px);
+            border-radius: 2rem;
+            border: 1px solid rgba(124, 77, 255, 0.5);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 15px rgba(0, 229, 255, 0.2);
+            transition: all 0.3s cubic-bezier(0.2, 0.9, 0.4, 1.1);
+            transform-style: preserve-3d;
+        }
+        .glass-card:hover {
+            border-color: #00E5FF;
+            box-shadow: 0 30px 55px rgba(0, 0, 0, 0.5), 0 0 30px rgba(0, 229, 255, 0.5);
+            transform: translateY(-8px);
+        }
+
+        /* Magnetic buttons with light trail */
+        .btn-magnetic {
+            background: linear-gradient(135deg, #7C4DFF, #2a1a5e);
+            border: none;
+            padding: 1rem 2.2rem;
+            border-radius: 3rem;
+            font-weight: 700;
+            color: white;
+            cursor: pointer;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 8px 20px rgba(124, 77, 255, 0.6);
+        }
+        .btn-magnetic::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            transition: left 0.6s;
+        }
+        .btn-magnetic:hover::after { left: 100%; }
+        .btn-magnetic:active { transform: scale(0.96); }
+        
+        .btn-outline-neon {
+            background: transparent;
+            border: 1.5px solid #00E5FF;
+            color: #00E5FF;
+            border-radius: 3rem;
+            padding: 0.9rem 2rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+        }
+        .btn-outline-neon:hover {
+            background: rgba(0, 229, 255, 0.2);
+            box-shadow: 0 0 20px #00E5FF;
+            transform: translateY(-2px);
+        }
+
+        /* Layout with premium spacing */
+        section {
+            padding: 6rem 2rem;
+            max-width: 1400px;
+            margin: 0 auto;
+            position: relative;
+        }
+        .hero {
+            min-height: 95vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            flex-direction: column;
+        }
+        .grid-2col {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+            gap: 2.5rem;
+        }
+        .comparison-cards {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 2rem;
+            justify-content: center;
+        }
+        .card-option {
+            flex: 1;
+            min-width: 280px;
+            padding: 2rem;
+        }
+        .stats-badge {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 1.5rem;
+            background: rgba(0,0,0,0.5);
+            border-radius: 2rem;
+            padding: 0.8rem 1rem;
+            font-size: 0.95rem;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+        }
+        .chart-container {
+            background: rgba(0, 0, 0, 0.5);
+            border-radius: 1.5rem;
+            padding: 1.2rem;
+            backdrop-filter: blur(4px);
+            transition: all 0.2s;
+        }
+        canvas#radarChart, canvas#barChart, canvas#lineChart {
+            max-height: 280px;
+            width: 100%;
+        }
+        .heatmap-grid {
+            display: flex;
+            gap: 2rem;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-top: 1rem;
+        }
+        .heatmap-canvas {
+            width: 220px;
+            height: 220px;
+            border-radius: 1.2rem;
+            box-shadow: 0 0 18px rgba(0,229,255,0.4);
+            transition: transform 0.2s, box-shadow 0.2s;
+            animation: pulseGlowHeat 3s infinite alternate;
+        }
+        @keyframes pulseGlowHeat {
+            0% { box-shadow: 0 0 10px rgba(0,229,255,0.3); }
+            100% { box-shadow: 0 0 25px rgba(124,77,255,0.6); }
+        }
+
+        /* Cinematic fullscreen sequence */
+        .cinematic-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.96);
+            backdrop-filter: blur(18px);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.5s ease;
+        }
+        .cinematic-overlay.active {
+            opacity: 1;
+            visibility: visible;
+        }
+        .scanner-line {
+            position: absolute;
+            top: -10%;
+            left: 0;
+            width: 100%;
+            height: 15%;
+            background: linear-gradient(to bottom, rgba(0,229,255,0), rgba(0,229,255,0.5), rgba(0,229,255,0));
+            animation: scanDown 1.2s ease-in-out forwards;
+        }
+        @keyframes scanDown {
+            0% { top: -20%; }
+            100% { top: 120%; }
+        }
+        .cinematic-text {
+            font-size: 2rem;
+            font-weight: 600;
+            text-align: center;
+            letter-spacing: 3px;
+            background: linear-gradient(135deg, #fff, #7C4DFF, #00E5FF);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            animation: textPulse 1s infinite alternate;
+        }
+        .cinematic-sub {
+            margin-top: 1rem;
+            font-size: 1rem;
+            color: #aaddff;
+        }
+        @keyframes textPulse {
+            0% { text-shadow: 0 0 5px #7C4DFF; opacity: 0.7; }
+            100% { text-shadow: 0 0 25px #00E5FF; opacity: 1; }
+        }
+        .branch-hologram {
+            display: flex;
+            gap: 2rem;
+            margin-top: 2rem;
+            font-size: 0.9rem;
+            color: cyan;
+        }
+
+        input, textarea {
+            background: rgba(10, 20, 30, 0.9);
+            border: 1px solid #7C4DFF;
+            border-radius: 2rem;
+            padding: 0.8rem 1.2rem;
+            color: white;
+            width: 100%;
+        }
+        input:focus {
+            outline: none;
+            border-color: #00E5FF;
+            box-shadow: 0 0 12px #00E5FF;
+        }
+        .slider-neon { accent-color: #7C4DFF; }
+        footer {
+            text-align: center;
+            padding: 2rem;
+            border-top: 1px solid rgba(124,77,255,0.3);
+        }
+        @media (max-width: 768px) {
+            section { padding: 3rem 1rem; }
+            .btn-magnetic, .btn-outline-neon { padding: 0.7rem 1.3rem; }
+        }
+        .timeline-node {
+            display: flex;
+            gap: 1.8rem;
+            margin-bottom: 2.5rem;
+            opacity: 0;
+            transform: translateY(40px);
+            transition: all 0.8s;
+        }
+        .timeline-node.reveal { opacity: 1; transform: translateY(0); }
+        .timeline-dot {
+            width: 20px; height: 20px;
+            background: #00E5FF;
+            border-radius: 50%;
+            box-shadow: 0 0 18px cyan;
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="threeCanvas"></canvas>
+<div class="fog-layer fog1"></div>
+<div class="fog-layer fog2"></div>
+<div class="grain-overlay"></div>
+
+<!-- Cinematic overlay -->
+<div id="cinematicOverlay" class="cinematic-overlay">
+    <div class="scanner-line"></div>
+    <div class="cinematic-text">Analyzing timeline probability...</div>
+    <div class="cinematic-sub">Simulating alternate life branches</div>
+    <div style="margin-top: 2rem;"><i class="fas fa-chart-line fa-2x" style="color:#00E5FF;"></i></div>
+    <div class="branch-hologram" id="hologramBranches"></div>
+</div>
+
+<!-- HERO -->
+<section class="hero">
+    <div class="tilt-card">
+        <h1 style="font-size: 4.5rem; font-weight: 800; background: linear-gradient(135deg, #fff, #7C4DFF, #00E5FF); -webkit-background-clip: text; background-clip: text; color: transparent;">See Your Future<br>Before You Choose</h1>
+        <p style="font-size: 1.3rem; margin: 1.5rem auto; max-width: 650px;">Cinematic AI decision engine — real‑time 3D depth, story‑driven intelligence.</p>
+        <div style="display: flex; gap: 1.5rem; justify-content: center; margin-top: 2rem;">
+            <button class="btn-magnetic" id="startSimBtn"><i class="fas fa-play"></i> Start Simulation</button>
+            <button class="btn-outline-neon" id="viewDemoBtn"><i class="fas fa-chart-line"></i> View Demo</button>
+        </div>
+    </div>
+</section>
+
+<!-- DECISION MATRIX -->
+<section id="comparisonSection">
+    <h2 style="font-size: 2rem; margin-bottom: 2.5rem;">⚡ Decision Matrix</h2>
+    <div class="comparison-cards">
+        <div class="glass-card card-option tilt-card">
+            <h3><i class="fas fa-microchip"></i> Option A</h3>
+            <input type="text" id="optionAName" value="AI Engineering Master's">
+            <div id="statsA" class="stats-badge">
+                <span>📈 Career: <span id="careerA">--</span>%</span>
+                <span>😊 Happiness: <span id="happyA">--</span>%</span>
+                <span>⚠️ Risk: <span id="riskA">--</span>%</span>
+            </div>
+        </div>
+        <div class="glass-card card-option tilt-card">
+            <h3><i class="fas fa-rocket"></i> Option B</h3>
+            <input type="text" id="optionBName" value="Founder Bootcamp + Venture">
+            <div id="statsB" class="stats-badge">
+                <span>📈 Career: <span id="careerB">--</span>%</span>
+                <span>😊 Happiness: <span id="happyB">--</span>%</span>
+                <span>⚠️ Risk: <span id="riskB">--</span>%</span>
+            </div>
+        </div>
+    </div>
+    <div style="margin: 2rem 0; text-align: center;">
+        <div class="glass-card" style="display: inline-flex; gap: 1.5rem; padding: 0.8rem 2rem;">
+            <span><i class="fas fa-sliders-h"></i> Balance</span>
+            <input type="range" id="comparisonSlider" min="0" max="100" value="50" class="slider-neon" style="width: 200px;">
+            <span id="sliderLabel">Neutral</span>
+        </div>
+    </div>
+    <div class="glass-card tilt-card" style="padding: 1.8rem;">
+        <h4>🤖 AI Analysis Panel</h4>
+        <p id="aiAnalysisText">Awaiting simulation...</p>
+    </div>
+</section>
+
+<!-- DASHBOARD (spaced) -->
+<section id="dashboard">
+    <h2 style="font-size: 2rem; margin-bottom: 2rem;">📊 Outcome Dashboard</h2>
+    <div class="grid-2col" style="gap: 2.5rem;">
+        <div class="chart-container glass-card"><canvas id="radarChart"></canvas><p>🔮 Multi‑dimensional Impact</p></div>
+        <div class="chart-container glass-card"><canvas id="barChart"></canvas><p>🏆 Comparative Metrics</p></div>
+        <div class="chart-container glass-card"><canvas id="lineChart"></canvas><p>📅 Timeline (Year 1 → Year 10)</p></div>
+        <div class="glass-card" style="padding: 1.5rem;">
+            <p><i class="fas fa-fire"></i> Probability Heatmaps</p>
+            <div class="heatmap-grid">
+                <canvas id="heatmapA" width="220" height="220" class="heatmap-canvas"></canvas>
+                <canvas id="heatmapB" width="220" height="220" class="heatmap-canvas"></canvas>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- SIMULATION ENGINE with story output -->
+<section id="simulationEngine">
+    <div class="glass-card tilt-card" style="padding: 2rem;">
+        <h3>🧠 AI Story Engine</h3>
+        <div class="grid-2col" style="margin: 1.5rem 0;">
+            <div><label>🌍 Global Trend</label><input type="range" id="globalTrend" min="0" max="100" value="68" class="slider-neon"><span id="trendVal">68%</span></div>
+            <div><label>⚡ Risk Resilience</label><input type="range" id="riskResilience" min="0" max="100" value="45" class="slider-neon"><span id="riskVal">45%</span></div>
+        </div>
+        <button id="runSimulationBtn" class="btn-magnetic" style="width: 100%;"><i class="fas fa-chart-simple"></i> RUN CINEMATIC SIMULATION</button>
+        <div id="aiInsightsPanel" class="glass-card" style="margin-top: 2rem; padding: 1.5rem;">
+            <h5>✨ Life Story Prediction</h5>
+            <div id="scenarioType" style="font-weight: 700; margin-bottom: 12px; color:#00E5FF;"></div>
+            <div id="insightText" style="line-height: 1.5; white-space: pre-line;"></div>
+            <div style="margin-top: 1rem; border-top: 1px solid rgba(255,255,255,0.2); padding-top: 0.8rem;">
+                <span id="regretProb">🔮 Regret probability: --</span> &nbsp;|&nbsp;
+                <span id="satisfaction">😌 Long‑term satisfaction: --</span> &nbsp;|&nbsp;
+                <span id="identityScore">🎯 Identity alignment: --</span>
+            </div>
+        </div>
+        <div style="display: flex; gap: 1rem; margin-top: 1.5rem; flex-wrap: wrap;">
+            <button id="exportPdfBtn" class="btn-outline-neon"><i class="fas fa-file-pdf"></i> Export PDF</button>
+            <button id="shareLinkedinBtn" class="btn-outline-neon"><i class="fab fa-linkedin"></i> Share to LinkedIn</button>
+        </div>
+    </div>
+</section>
+
+<!-- ROADMAP -->
+<section id="roadmap">
+    <h2 style="font-size: 2rem; margin-bottom: 2rem;">🚀 Strategic Roadmap</h2>
+    <div class="timeline">
+        <div class="timeline-node"><div class="timeline-dot"></div><div><h3>Phase 1: Define Ambitions</h3><p>Set life pillars & gather data</p></div></div>
+        <div class="timeline-node"><div class="timeline-dot"></div><div><h3>Phase 2: Decision Simulation</h3><p>AI runs probabilistic models</p></div></div>
+        <div class="timeline-node"><div class="timeline-dot"></div><div><h3>Phase 3: Outcome Visualization</h3><p>Heatmaps, forecasts & risk analysis</p></div></div>
+        <div class="timeline-node"><div class="timeline-dot"></div><div><h3>Phase 4: Actionable Intelligence</h3><p>Personalized next‑step strategy</p></div></div>
+    </div>
+</section>
+<footer>NEBULA DECISIONS — Cinematic AI Core</footer>
+
+<script type="module">
+    import * as THREE from 'three';
+
+    // --- VOLUMETRIC 3D DEPTH ENVIRONMENT ---
+    const canvas = document.getElementById('threeCanvas');
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    const scene = new THREE.Scene();
+    scene.background = null;
+    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 2, 28);
+    
+    // Nebula particle system (volumetric)
+    const particleCount = 4500;
+    const geom = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    for (let i = 0; i < particleCount; i++) {
+        const radius = 14 + Math.random() * 12;
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        const x = radius * Math.sin(phi) * Math.cos(theta);
+        const y = radius * Math.sin(phi) * Math.sin(theta) * 0.6;
+        const z = radius * Math.cos(phi);
+        positions[i*3] = x;
+        positions[i*3+1] = y * 1.2;
+        positions[i*3+2] = z;
+        const color = new THREE.Color().setHSL(0.65 + Math.random() * 0.2, 0.9, 0.55);
+        colors[i*3] = color.r;
+        colors[i*3+1] = color.g;
+        colors[i*3+2] = color.b;
+    }
+    geom.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geom.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    const particleMat = new THREE.PointsMaterial({ size: 0.2, vertexColors: true, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending });
+    const particleSys = new THREE.Points(geom, particleMat);
+    scene.add(particleSys);
+    
+    // Floating orbs (depth)
+    const orbGroup = new THREE.Group();
+    for (let i = 0; i < 140; i++) {
+        const orbGeo = new THREE.SphereGeometry(0.09, 6, 6);
+        const orbMat = new THREE.MeshStandardMaterial({ color: 0x00E5FF, emissive: 0x2266aa, emissiveIntensity: 0.6 });
+        const orb = new THREE.Mesh(orbGeo, orbMat);
+        orb.userData = { vx: (Math.random()-0.5)*0.005, vy: (Math.random()-0.5)*0.005, vz: (Math.random()-0.5)*0.005 };
+        orb.position.set((Math.random()-0.5)*25, (Math.random()-0.5)*18, (Math.random()-0.5)*22);
+        orbGroup.add(orb);
+    }
+    scene.add(orbGroup);
+    
+    // Lighting (depth glow)
+    const ambient = new THREE.AmbientLight(0x111133);
+    scene.add(ambient);
+    const light1 = new THREE.PointLight(0x7C4DFF, 0.9);
+    light1.position.set(6, 5, 12);
+    scene.add(light1);
+    const light2 = new THREE.PointLight(0x00E5FF, 0.7);
+    light2.position.set(-5, 3, -10);
+    scene.add(light2);
+    
+    let time = 0;
+    let mouseX = 0, mouseY = 0;
+    window.addEventListener('mousemove', (e) => {
+        mouseX = (e.clientX / window.innerWidth - 0.5) * 1.2;
+        mouseY = (e.clientY / window.innerHeight - 0.5) * 0.8;
+    });
+    
+    function animate3d() {
+        requestAnimationFrame(animate3d);
+        time += 0.003;
+        // breathing rotation
+        particleSys.rotation.y = time * 0.12;
+        particleSys.rotation.x = Math.sin(time * 0.08) * 0.1;
+        orbGroup.children.forEach(orb => {
+            orb.position.x += orb.userData.vx;
+            orb.position.y += orb.userData.vy;
+            orb.position.z += orb.userData.vz;
+            if (Math.abs(orb.position.x) > 24) orb.userData.vx *= -1;
+            if (Math.abs(orb.position.y) > 18) orb.userData.vy *= -1;
+            if (Math.abs(orb.position.z) > 22) orb.userData.vz *= -1;
+        });
+        // smooth mouse inertia
+        camera.position.x += (mouseX * 0.6 - camera.position.x) * 0.05;
+        camera.position.y += (-mouseY * 0.4 - camera.position.y) * 0.05;
+        camera.lookAt(0, 0, 0);
+        renderer.render(scene, camera);
+    }
+    animate3d();
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+    
+    // --- STORY-DRIVEN SIMULATION ENGINE (scenario based) ---
+    let barChart, radarChart, lineChart;
+    let currentOptionA = { name: "AI Engineering Master's", career: 78, happiness: 72, risk: 22 };
+    let currentOptionB = { name: "Founder Bootcamp + Venture", career: 88, happiness: 85, risk: 55 };
+    let currentScenarioData = {};
+    
+    function generateLifeStory(optA, optB, trend, resilience) {
+        const riskAvg = (optA.risk + optB.risk) / 2;
+        const careerAvg = (optA.career + optB.career) / 2;
+        let pathType = "";
+        if (riskAvg < 30 && careerAvg < 70) pathType = "🧘 Conservative Path";
+        else if (riskAvg > 55 && careerAvg > 80) pathType = "🚀 High Growth Path";
+        else pathType = "⚖️ Balanced Path";
+        
+        // Yearly story progression
+        let story = `📅 **Year 1:** ${pathType.includes("Conservative") ? "You feel secure but restless. Small wins, low stress." : pathType.includes("High") ? "Intense beginning: huge risks, sleepless nights, but excitement peaks." : "Stable start: steady learning, moderate pressure, hope for future."}\n`;
+        story += `📅 **Year 3:** ${pathType.includes("Conservative") ? "Slow but steady promotions. Some regret about missed adventures." : pathType.includes("High") ? "Big breakthrough or failure — emotional rollercoaster. Confidence shaken then restored." : "Balanced growth, you build strong network and emotional stability."}\n`;
+        story += `📅 **Year 5:** ⚡ TURNING POINT: ${pathType.includes("Conservative") ? "A safe lateral move — you prioritize family but career plateaus." : pathType.includes("High") ? "Either unicorn success or burnout. Plot twist: unexpected mentor changes everything." : "You face a dilemma between scaling up or staying comfortable. Choose wisely."}\n`;
+        story += `📅 **Year 10:** ${pathType.includes("Conservative") ? "Peaceful but unfulfilled: high savings, low impact regret." : pathType.includes("High") ? "Legendary status or reinvention: no middle ground. Emotional extremes." : "Sustainable success, respect, and deep satisfaction. You found your rhythm."}\n`;
+        story += `\n💡 Emotional evolution: ${pathType.includes("Conservative") ? "Stress low → confidence medium → regret moderate." : pathType.includes("High") ? "Stress high → euphoria peaks → potential burnout waves." : "Stress balanced → satisfaction rising → long-term fulfillment."}`;
+        
+        // identity / regret scores
+        const regretProb = pathType.includes("High") ? Math.floor(35 + Math.random() * 20) : pathType.includes("Conservative") ? Math.floor(45 + Math.random() * 15) : Math.floor(20 + Math.random() * 20);
+        const satisfaction = pathType.includes("High") ? Math.floor(40 + Math.random() * 35) : pathType.includes("Conservative") ? Math.floor(65 + Math.random() * 20) : Math.floor(70 + Math.random() * 20);
+        const identity = pathType.includes("High") ? Math.floor(70 + Math.random() * 20) : pathType.includes("Conservative") ? Math.floor(55 + Math.random() * 20) : Math.floor(80 + Math.random() * 15);
+        
+        return { type: pathType, story, regretProb, satisfaction, identity };
+    }
+    
+    function computeOutcomes(optName, globalTrend, riskResilience, isA) {
+        let baseSeed = optName.length * 7 + (isA ? 13 : 29);
+        let trendMod = (globalTrend - 50) / 50;
+        let riskMod = (riskResilience - 50) / 50;
+        let career = 50 + (baseSeed % 40) + (trendMod * 18);
+        career = Math.min(98, Math.max(35, career));
+        let happiness = 55 + ((baseSeed * 2) % 35) + (riskMod * 10);
+        happiness = Math.min(96, Math.max(40, happiness));
+        let risk = 25 + ((baseSeed * 3) % 45) - (riskResilience * 0.35);
+        risk = Math.min(85, Math.max(12, risk));
+        if (optName.toLowerCase().includes("master")) { career += 6; risk -= 5; }
+        if (optName.toLowerCase().includes("founder")) { career += 12; risk += 12; happiness += 8; }
+        return { career: Math.floor(career), happiness: Math.floor(happiness), risk: Math.floor(risk) };
+    }
+    
+    function updateStatsUI() {
+        document.getElementById("careerA").innerText = currentOptionA.career;
+        document.getElementById("happyA").innerText = currentOptionA.happiness;
+        document.getElementById("riskA").innerText = currentOptionA.risk;
+        document.getElementById("careerB").innerText = currentOptionB.career;
+        document.getElementById("happyB").innerText = currentOptionB.happiness;
+        document.getElementById("riskB").innerText = currentOptionB.risk;
+    }
+    
+    function drawHeatmap(canvasId, successProb, riskProb) {
+        let canvas = document.getElementById(canvasId);
+        if(!canvas) return;
+        let ctx = canvas.getContext('2d');
+        let size = 220;
+        canvas.width = size; canvas.height = size;
+        let cellSize = size/4;
+        for(let i=0;i<4;i++){
+            for(let j=0;j<4;j++){
+                let val = (successProb * (1- (i*0.15)) + (riskProb * (j*0.1))) * 0.7 + 0.2;
+                let intensity = Math.min(0.95, val);
+                let r = 80 + Math.floor(120 * intensity);
+                let g = 40 + Math.floor(100 * (1-intensity));
+                let b = 180 + Math.floor(75 * intensity);
+                ctx.fillStyle = `rgb(${r}, ${g}, ${b})`;
+                ctx.fillRect(j*cellSize, i*cellSize, cellSize-1, cellSize-1);
+                ctx.fillStyle = "#ccddff";
+                ctx.font = "bold 12px 'Inter'";
+                ctx.fillText(Math.floor(intensity*100)+"%", j*cellSize+6, i*cellSize+24);
+            }
+        }
+    }
+    
+    function updateCharts() {
+        const riskScoreA = 100 - currentOptionA.risk;
+        const riskScoreB = 100 - currentOptionB.risk;
+        barChart.data.datasets[0].data = [currentOptionA.career, currentOptionA.happiness, riskScoreA];
+        barChart.data.datasets[1].data = [currentOptionB.career, currentOptionB.happiness, riskScoreB];
+        barChart.update();
+        
+        let skillA = currentOptionA.career * 0.7 + 20;
+        let skillB = currentOptionB.career * 0.7 + 15;
+        let networkA = currentOptionA.happiness * 0.6 + 15;
+        let networkB = currentOptionB.happiness * 0.7 + 10;
+        let wlbA = currentOptionA.happiness - currentOptionA.risk*0.2;
+        let wlbB = currentOptionB.happiness - currentOptionB.risk*0.3;
+        let incomeA = currentOptionA.career * 1.1;
+        let incomeB = currentOptionB.career * 1.25;
+        let stabilityA = 100 - currentOptionA.risk;
+        let stabilityB = 100 - currentOptionB.risk;
+        radarChart.data.datasets[0].data = [Math.min(100,skillA), Math.min(100,networkA), Math.min(100,wlbA), Math.min(100,incomeA), stabilityA];
+        radarChart.data.datasets[1].data = [Math.min(100,skillB), Math.min(100,networkB), Math.min(100,wlbB), Math.min(100,incomeB), stabilityB];
+        radarChart.update();
+        
+        let years = [1,3,5,10];
+        let valuesA = years.map(y => Math.min(100, currentOptionA.career + (y*1.8) - (currentOptionA.risk*0.2)));
+        let valuesB = years.map(y => Math.min(100, currentOptionB.career + (y*2.2) - (currentOptionB.risk*0.3)));
+        lineChart.data.datasets[0].data = valuesA;
+        lineChart.data.datasets[1].data = valuesB;
+        lineChart.update();
+        
+        drawHeatmap("heatmapA", currentOptionA.career/100, currentOptionA.risk/100);
+        drawHeatmap("heatmapB", currentOptionB.career/100, currentOptionB.risk/100);
+    }
+    
+    // CINEMATIC SIMULATION WITH FULL SCREEN SEQUENCE
+    async function runCinematicSimulation() {
+        const overlay = document.getElementById("cinematicOverlay");
+        overlay.classList.add("active");
+        // simulate scanner and zoom
+        await new Promise(r => setTimeout(r, 1500));
+        
+        let optAName = document.getElementById("optionAName").value.trim() || "Option A";
+        let optBName = document.getElementById("optionBName").value.trim() || "Option B";
+        let globalTrend = parseInt(document.getElementById("globalTrend").value);
+        let riskRes = parseInt(document.getElementById("riskResilience").value);
+        let outcomesA = computeOutcomes(optAName, globalTrend, riskRes, true);
+        let outcomesB = computeOutcomes(optBName, globalTrend, riskRes, false);
+        currentOptionA = { name: optAName, career: outcomesA.career, happiness: outcomesA.happiness, risk: outcomesA.risk };
+        currentOptionB = { name: optBName, career: outcomesB.career, happiness: outcomesB.happiness, risk: outcomesB.risk };
+        updateStatsUI();
+        updateCharts();
+        
+        const storyData = generateLifeStory(currentOptionA, currentOptionB, globalTrend, riskRes);
+        currentScenarioData = storyData;
+        document.getElementById("scenarioType").innerHTML = `<i class="fas fa-brain"></i> ${storyData.type}`;
+        document.getElementById("insightText").innerHTML = storyData.story.replace(/\n/g,'<br>');
+        document.getElementById("regretProb").innerHTML = `🔮 Regret probability: ${storyData.regretProb}%`;
+        document.getElementById("satisfaction").innerHTML = `😌 Long‑term satisfaction: ${storyData.satisfaction}%`;
+        document.getElementById("identityScore").innerHTML = `🎯 Identity alignment: ${storyData.identity}%`;
+        document.getElementById("aiAnalysisText").innerHTML = `🎯 ${storyData.type} selected. Emotional conflict: ${Math.abs(currentOptionA.happiness - currentOptionB.happiness) > 15 ? "High tension between options." : "Moderate alignment."}`;
+        
+        // hologram branches effect
+        const hologramDiv = document.getElementById("hologramBranches");
+        hologramDiv.innerHTML = `<span style="background:rgba(0,0,0,0.5);padding:0.3rem 0.8rem;border-radius:2rem;">🌿 Balanced: ${storyData.satisfaction}% sat.</span> <span>🚀 Growth: ${storyData.regretProb < 40 ? "Low regret" : "Moderate regret"}</span>`;
+        await new Promise(r => setTimeout(r, 800));
+        overlay.classList.remove("active");
+    }
+    
+    // --- UI BINDINGS ---
+    document.getElementById("startSimBtn").addEventListener("click", () => {
+        document.getElementById("simulationEngine").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    document.getElementById("viewDemoBtn").addEventListener("click", () => {
+        document.getElementById("optionAName").value = "AI Research Path";
+        document.getElementById("optionBName").value = "Startup Founder Track";
+        runCinematicSimulation();
+    });
+    document.getElementById("runSimulationBtn").addEventListener("click", runCinematicSimulation);
+    
+    // PDF export
+    async function exportPDF() {
+        const element = document.getElementById("dashboard");
+        const insights = document.getElementById("aiInsightsPanel");
+        const tempDiv = document.createElement("div");
+        tempDiv.appendChild(element.cloneNode(true));
+        tempDiv.appendChild(insights.cloneNode(true));
+        tempDiv.style.padding = "20px";
+        tempDiv.style.backgroundColor = "#0B0F1A";
+        document.body.appendChild(tempDiv);
+        try {
+            const canvas = await html2canvas(tempDiv, { scale: 2, backgroundColor: "#0B0F1A" });
+            const imgData = canvas.toDataURL("image/png");
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF('l', 'mm', 'a4');
+            const imgProps = pdf.getImageProperties(imgData);
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+            pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+            pdf.save("decision_simulator_report.pdf");
+        } catch(e) { alert("Export error"); }
+        document.body.removeChild(tempDiv);
+    }
+    function shareLinkedIn() {
+        const text = `I simulated my future with NEBULA DECISIONS. Path: ${currentScenarioData.type || "Balanced"}. Satisfaction: ${currentScenarioData.satisfaction || "—"}% 🚀 #AIDecision`;
+        window.open(`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(window.location.href)}&summary=${encodeURIComponent(text)}`, '_blank');
+    }
+    document.getElementById("exportPdfBtn").addEventListener("click", exportPDF);
+    document.getElementById("shareLinkedinBtn").addEventListener("click", shareLinkedIn);
+    document.getElementById("globalTrend").addEventListener("input", (e) => document.getElementById("trendVal").innerText = e.target.value+"%");
+    document.getElementById("riskResilience").addEventListener("input", (e) => document.getElementById("riskVal").innerText = e.target.value+"%");
+    document.getElementById("comparisonSlider").addEventListener("input", (e) => {
+        let val = e.target.value;
+        document.getElementById("sliderLabel").innerHTML = val>60?"Lean A":val<40?"Lean B":"Balanced";
+    });
+    
+    // tilt cards effect
+    const tiltCards = document.querySelectorAll('.tilt-card');
+    tiltCards.forEach(card => {
+        card.addEventListener('mousemove', (e) => {
+            const rect = card.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            const cx = rect.width/2, cy = rect.height/2;
+            const rotX = (y - cy)/20, rotY = (cx - x)/20;
+            card.style.transform = `perspective(800px) rotateX(${rotX}deg) rotateY(${rotY}deg) translateZ(5px)`;
+        });
+        card.addEventListener('mouseleave', () => { card.style.transform = ''; });
+    });
+    
+    function initCharts() {
+        const ctxBar = document.getElementById("barChart").getContext("2d");
+        const ctxRadar = document.getElementById("radarChart").getContext("2d");
+        const ctxLine = document.getElementById("lineChart").getContext("2d");
+        barChart = new Chart(ctxBar, {
+            type: 'bar', data: { labels: ['Career', 'Happiness', 'Stability'], datasets: [
+                { label: 'Option A', data: [78,72,78], backgroundColor: '#7C4DFF', borderRadius: 12 },
+                { label: 'Option B', data: [88,85,45], backgroundColor: '#00E5FF', borderRadius: 12 }
+            ]}, options: { responsive: true, maintainAspectRatio: true, plugins: { legend: { labels: { color: '#ccc' } } } }
+        });
+        radarChart = new Chart(ctxRadar, {
+            type: 'radar', data: { labels: ['Skills', 'Network', 'Work/Life', 'Income', 'Stability'], datasets: [
+                { label: 'A', data: [70,65,75,80,78], backgroundColor: 'rgba(124,77,255,0.2)', borderColor: '#7C4DFF' },
+                { label: 'B', data: [82,78,68,92,45], backgroundColor: 'rgba(0,229,255,0.2)', borderColor: '#00E5FF' }
+            ]}, options: { responsive: true, plugins: { legend: { labels: { color: '#eee' } } } }
+        });
+        lineChart = new Chart(ctxLine, {
+            type: 'line', data: { labels: ['Y1', 'Y3', 'Y5', 'Y10'], datasets: [
+                { label: 'A', data: [78,82,86,91], borderColor: '#7C4DFF', tension: 0.3 },
+                { label: 'B', data: [88,92,89,94], borderColor: '#00E5FF', tension: 0.3 }
+            ]}, options: { responsive: true }
+        });
+    }
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(e => { if(e.isIntersecting) e.target.classList.add("reveal"); });
+    }, { threshold: 0.2 });
+    document.querySelectorAll(".timeline-node").forEach(n => observer.observe(n));
+    
+    initCharts();
+    runCinematicSimulation();
+</script>
+</body>
+</html>
